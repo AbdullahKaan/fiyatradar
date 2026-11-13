@@ -9,12 +9,12 @@ GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 AFFILIATE_TAG = os.getenv("AFFILIATE_TAG", "")
 
 # Embedding model
-EMBEDDING_MODEL = "models/text-embedding-004"
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
 EMBEDDING_DIMENSION = 768
 SIMILARITY_THRESHOLD = 0.88  # cosine similarity to consider same product
 
 # Gemini model for analysis
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 
 # Scraping limits
 MAX_PRODUCTS_PER_RUN = 500

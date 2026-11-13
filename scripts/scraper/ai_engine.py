@@ -42,7 +42,7 @@ def _extract_json(text: str) -> dict:
 
 @_retry
 def get_embedding(text: str) -> list[float]:
-    result = genai.embed_content(model=EMBEDDING_MODEL, content=text[:8000], task_type="semantic_similarity")
+    result = genai.embed_content(model=EMBEDDING_MODEL, content=text[:8000], task_type="semantic_similarity", output_dimensionality=EMBEDDING_DIMENSION)
     vec = np.asarray(result["embedding"], dtype=np.float32)
     if vec.shape[0] != EMBEDDING_DIMENSION:
         raise ValueError(f"Unexpected embedding dim {vec.shape[0]}")
