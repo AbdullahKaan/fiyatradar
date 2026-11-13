@@ -1,0 +1,48 @@
+name: FiyatRadar Scraper Cron
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      AFFILIATE_TAG: ${{ secrets.AFFILIATE_TAG }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: scripts/scraper/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/scraper/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run scraper pipeline
+        run: python scripts/scraper/main.py
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "Scraper başarısız: $(date -u +'%Y-%m-%d %H:%M UTC')" \
+            --body "FiyatRadar scraper çalışması başarısız oldu. Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
