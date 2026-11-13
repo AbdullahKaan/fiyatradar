@@ -31,6 +31,27 @@ body {
   .input {
     @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900;
   }
+  .btn-gradient {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/25 transition hover:shadow-lg hover:shadow-indigo-500/40 hover:brightness-110 disabled:opacity-60;
+  }
+  .text-gradient {
+    @apply bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400;
+  }
+  .pill {
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition;
+  }
+  .pill-active {
+    @apply border-transparent bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25;
+  }
+  .pill-inactive {
+    @apply border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
   .skeleton {
     @apply animate-shimmer rounded-lg bg-slate-200 dark:bg-slate-800;
     background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / 0.35) 50%, transparent 100%);

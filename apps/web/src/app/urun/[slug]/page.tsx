@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ExternalLink, ImageOff, ShieldCheck } from 'lucide-react';
-import { getPriceHistory, getProductBySlug, getProductListings, PRODUCT_COLUMNS, type MasterProduct, type StoreListing } from '@price-compare/shared';
-import { AIAnalysisCard } from '@/components/ai-analysis-card';
-import { PriceChart } from '@/components/price-chart';
+import { AlertTriangle, Bot, ChevronRight, ExternalLink, TrendingDown, TrendingUp } from 'lucide-react';
+import { getPriceHistory, getProductBySlug, getProductListings, type AIPriceAnalysis } from '@price-compare/shared';
 import { PriceAlertButton } from '@/components/price-alert-button';
-import { ProductCard } from '@/components/product-card';
+import { ProductGallery } from '@/components/product/ProductGallery';
+import { ProductActions } from '@/components/product/ProductActions';
+import { PriceHistoryChart } from '@/components/product/PriceHistoryChart';
+import { SimilarCarousel } from '@/components/product/SimilarCarousel';
+import { CATALOG_SELECT, normalizeCatalogRow, VERDICTS } from '@/lib/catalog';
 import { getPublicSupabase, isSupabaseConfigured } from '@/lib/supabase';
-import { bestListing, formatPrice, timeAgo } from '@/lib/utils';
+import { bestListing, cn, formatPrice, storeTheme, timeAgo } from '@/lib/utils';
 
 export const revalidate = 1800;
 export const dynamicParams = true;
@@ -27,14 +28,11 @@ async function loadProduct(slug: string) {
   if (!product) return null;
   const [listings, history, similarRes] = await Promise.all([
     getProductListings(product.id, supabase),
-    getPriceHistory(product.id, undefined, 180, supabase),
-    supabase.from('master_products').select(`${PRODUCT_COLUMNS}, store_listings(*, store:stores(*))`).eq('category', product.category).neq('id', product.id).limit(4),
+    getPriceHistory(product.id, undefined, 30, supabase),
+    supabase.from('master_products').select(CATALOG_SELECT).eq('category', product.category).neq('id', product.id).limit(8),
   ]);
-  const similar = (similarRes.data ?? []).map((raw) => {
-    const { store_listings, ...rest } = raw as Record<string, unknown> & { store_listings?: StoreListing[] };
-    return { product: rest as unknown as MasterProduct, listings: (store_listings ?? []).map((l) => ({ ...l, current_price: Number(l.current_price) })) };
-  });
-  return { product, listings, history, similar };
+  const similar = (similarRes.data ?? []).map(normalizeCatalogRow);
+  return { product, listings: listings.map((l) => ({ ...l, current_price: Number(l.current_price) })), history, similar };
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
@@ -46,112 +44,181 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   return { title, description, openGraph: { title, description, images: data.product.image_url ? [data.product.image_url] : [] } };
 }
 
+const VERDICT_CARD: Record<AIPriceAnalysis['verdict'], string> = {
+  BUY_NOW: 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10',
+  GOOD_DEAL: 'border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/10',
+  WAIT: 'border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10',
+  OVERPRICED: 'border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10',
+};
+
+function VerdictCard({ analysis }: { analysis: AIPriceAnalysis | null }) {
+  if (!analysis) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/50">
+        <Bot className="h-5 w-5 text-indigo-500" /> Bu ürün için AI fiyat analizi henüz hazırlanmadı.
+      </div>
+    );
+  }
+  const v = VERDICTS.find((x) => x.value === analysis.verdict);
+  const diff = Number(analysis.current_vs_avg_percent ?? 0);
+  return (
+    <section className={cn('overflow-hidden rounded-2xl border', VERDICT_CARD[analysis.verdict])} aria-label="AI Fiyat Analizi">
+      {analysis.fake_discount_detected && (
+        <div className="flex items-start gap-2 bg-red-600 px-4 py-2.5 text-sm font-medium text-white">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span><strong>Sahte İndirim Uyarısı:</strong> Fiyat, indirimden önce yapay olarak yükseltilmiş görünüyor.</span>
+        </div>
+      )}
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200"><Bot className="h-4 w-4 text-indigo-500" /> AI Kararı</p>
+          {v && <span className={cn('rounded-full px-3 py-1 text-xs font-bold', v.cls)}>{v.emoji} {v.label}</span>}
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{analysis.summary}</p>
+        <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="rounded-xl bg-white/70 p-2 dark:bg-slate-900/50">
+            <dt className="text-slate-500">6 Ay En Düşük</dt>
+            <dd className="mt-0.5 font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(analysis.lowest_6m)}</dd>
+          </div>
+          <div className="rounded-xl bg-white/70 p-2 dark:bg-slate-900/50">
+            <dt className="text-slate-500">6 Ay En Yüksek</dt>
+            <dd className="mt-0.5 font-bold text-red-600 dark:text-red-400">{formatPrice(analysis.highest_6m)}</dd>
+          </div>
+          <div className="rounded-xl bg-white/70 p-2 dark:bg-slate-900/50">
+            <dt className="text-slate-500">Ortalamaya Göre</dt>
+            <dd className={cn('mt-0.5 flex items-center justify-center gap-1 font-bold', diff <= 0 ? 'text-emerald-600' : 'text-red-600')}>
+              {diff <= 0 ? <TrendingDown className="h-3.5 w-3.5" /> : <TrendingUp className="h-3.5 w-3.5" />}%{Math.abs(diff).toFixed(1)}
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-2 text-[11px] text-slate-400">Son analiz: {timeAgo(analysis.analyzed_at)}</p>
+      </div>
+    </section>
+  );
+}
+
 export default async function ProductPage({ params }: { params: { slug: string } }) {
   const data = await loadProduct(params.slug);
   if (!data) notFound();
   const { product, listings, history, similar } = data;
   const sorted = [...listings].sort((a, b) => Number(b.in_stock) - Number(a.in_stock) || a.current_price - b.current_price);
   const best = bestListing(listings);
-  const storeNames = Object.fromEntries(listings.map((l) => [l.store_id, l.store?.name ?? 'Mağaza']));
+  const chartStores = listings.map((l) => ({ id: l.store_id, name: l.store?.name ?? 'Mağaza' }));
   const specs = Object.entries(product.specs ?? {}).filter(([, v]) => v != null && typeof v !== 'object');
+  const categoryHref = `/ara?category=${encodeURIComponent(product.category)}` as never;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
-      <nav className="mb-4 text-sm text-slate-500">
-        <Link href="/" className="hover:text-primary">Ana Sayfa</Link> / <Link href={`/ara?category=${encodeURIComponent(product.category)}` as never} className="hover:text-primary">{product.category}</Link>
-      </nav>
-      <div className="grid gap-8 lg:grid-cols-2">
-        <div className="card relative aspect-square overflow-hidden bg-white">
-          {product.image_url ? (
-            <Image src={product.image_url} alt={product.name} fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-contain p-8" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-slate-300"><ImageOff className="h-16 w-16" /></div>
-          )}
+    <div className="mx-auto max-w-7xl animate-fadeIn px-4 py-6 sm:py-10">
+      <div className="grid gap-8 lg:grid-cols-5">
+        {/* Left: image (60%) */}
+        <div className="lg:col-span-3">
+          <div className="lg:sticky lg:top-24">
+            <ProductGallery src={product.image_url} alt={product.name} />
+          </div>
         </div>
-        <div className="space-y-5">
+
+        {/* Right: details (40%) */}
+        <div className="space-y-5 lg:col-span-2">
+          <nav aria-label="Sayfa yolu" className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+            <Link href="/" className="hover:text-indigo-600">Ana Sayfa</Link>
+            <ChevronRight className="h-3 w-3" />
+            <Link href={categoryHref} className="hover:text-indigo-600">{product.category}</Link>
+            <ChevronRight className="h-3 w-3" />
+            <span className="line-clamp-1 font-medium text-slate-700 dark:text-slate-300">{product.name}</span>
+          </nav>
+
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">{product.brand} · {product.category}</p>
-            <h1 className="mt-1 text-3xl font-extrabold">{product.name}</h1>
+            <div className="flex flex-wrap gap-2">
+              {product.brand && <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">{product.brand}</span>}
+              <Link href={categoryHref} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300">{product.category}</Link>
+            </div>
+            <h1 className="mt-3 text-2xl font-bold leading-tight text-slate-900 dark:text-white">{product.name}</h1>
             {best && (
-              <p className="mt-3 text-sm text-slate-500">
-                En düşük fiyat: <span className="text-2xl font-extrabold text-primary">{formatPrice(best.current_price, best.currency)}</span> · {best.store?.name}
-              </p>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-gradient text-3xl font-extrabold tracking-tight">{formatPrice(best.current_price, best.currency)}</span>
+                <span className="text-sm text-slate-500">en düşük · {best.store?.name}</span>
+              </div>
             )}
           </div>
-          <AIAnalysisCard analysis={product.ai_price_analysis} />
-          <div className="flex flex-wrap gap-3">
-            {best && <a href={best.affiliate_url || best.product_url} target="_blank" rel="noopener sponsored" className="btn-primary px-6 py-3">En Ucuz Mağazaya Git <ExternalLink className="h-4 w-4" /></a>}
+
+          <VerdictCard analysis={product.ai_price_analysis} />
+
+          {/* Price comparison table */}
+          <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Mağaza Fiyatları</h2>
+              <span className="text-xs text-slate-500">{sorted.length} mağaza</span>
+            </div>
+            {sorted.length === 0 ? (
+              <p className="p-5 text-sm text-slate-500">Bu ürün için mağaza fiyatı bulunmuyor.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {sorted.map((l) => {
+                  const theme = storeTheme(l.store?.name);
+                  const isBest = best?.id === l.id;
+                  return (
+                    <li key={l.id} className={cn('flex items-center gap-3 px-4 py-3', isBest && 'bg-emerald-50/60 dark:bg-emerald-500/5')}>
+                      <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', theme.dot)} />
+                      <div className="min-w-0 flex-1">
+                        <p className={cn('text-sm font-semibold', theme.text)}>{l.store?.name ?? 'Mağaza'}</p>
+                        <p className="text-[11px] text-slate-400">{l.in_stock ? 'Stokta' : 'Tükendi'} · {timeAgo(l.last_updated)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={cn('text-sm font-bold', isBest ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white')}>{formatPrice(l.current_price, l.currency)}</p>
+                        {isBest && <p className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">✓ En Ucuz</p>}
+                        {!isBest && l.original_price != null && Number(l.original_price) > l.current_price && (
+                          <p className="text-[11px] text-slate-400 line-through">{formatPrice(Number(l.original_price), l.currency)}</p>
+                        )}
+                      </div>
+                      <a
+                        href={l.affiliate_url || l.product_url}
+                        target="_blank"
+                        rel="noopener sponsored"
+                        className={cn('inline-flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition', isBest ? 'btn-gradient' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200')}
+                      >
+                        Siteye Git <span aria-hidden>→</span>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <ProductActions slug={product.slug} name={product.name} imageUrl={product.image_url} />
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            {best && (
+              <a href={best.affiliate_url || best.product_url} target="_blank" rel="noopener sponsored" className="btn-gradient px-5 py-2.5 text-sm">
+                En Ucuz Mağazaya Git <ExternalLink className="h-4 w-4" />
+              </a>
+            )}
             <PriceAlertButton productId={product.id} currentPrice={best?.current_price ?? null} />
           </div>
+
           {product.description && <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">{product.description}</p>}
         </div>
       </div>
 
-      <section className="card mt-8 overflow-hidden">
-        <h2 className="border-b border-slate-200 px-5 py-4 font-bold dark:border-slate-800">Mağaza Karşılaştırması ({sorted.length})</h2>
-        {sorted.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">Bu ürün için mağaza fiyatı bulunmuyor.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/50">
-                <tr><th className="px-5 py-3">Mağaza</th><th className="px-5 py-3">Fiyat</th><th className="px-5 py-3">Stok</th><th className="px-5 py-3">Güncelleme</th><th className="px-5 py-3" /></tr>
-              </thead>
-              <tbody>
-                {sorted.map((l, i) => (
-                  <tr key={l.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        {l.store?.logo_url ? (
-                          <Image src={l.store.logo_url} alt={l.store.name} width={32} height={32} className="h-8 w-8 rounded object-contain" />
-                        ) : (
-                          <span className="flex h-8 w-8 items-center justify-center rounded bg-primary/10 text-xs font-bold text-primary">{l.store?.name?.slice(0, 2) ?? '?'}</span>
-                        )}
-                        <div>
-                          <p className="font-semibold">{l.store?.name ?? 'Mağaza'}</p>
-                          {l.store && <p className="flex items-center gap-1 text-xs text-slate-500"><ShieldCheck className="h-3 w-3" /> Güven: {l.store.reliability_score}/100</p>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className={i === 0 && l.in_stock ? 'text-lg font-extrabold text-green-600' : 'font-bold'}>{formatPrice(l.current_price, l.currency)}</span>
-                      {l.original_price && l.original_price > l.current_price && <span className="ml-2 text-xs text-slate-400 line-through">{formatPrice(l.original_price, l.currency)}</span>}
-                      {l.discount_percent != null && l.discount_percent > 0 && <span className="ml-2 rounded bg-red-100 px-1.5 text-xs font-semibold text-red-600">-%{Math.round(l.discount_percent)}</span>}
-                    </td>
-                    <td className="px-5 py-3">{l.in_stock ? <span className="text-green-600">Stokta</span> : <span className="text-slate-400">Tükendi</span>}</td>
-                    <td className="px-5 py-3 text-slate-500">{timeAgo(l.last_updated)}</td>
-                    <td className="px-5 py-3 text-right">
-                      <a href={l.affiliate_url || l.product_url} target="_blank" rel="noopener sponsored" className="btn-primary whitespace-nowrap">Mağazaya Git <ExternalLink className="h-3.5 w-3.5" /></a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <div className="mt-8"><PriceChart history={history} storeNames={storeNames} /></div>
+      <div className="mt-10">
+        <PriceHistoryChart history={history} stores={chartStores} />
+      </div>
 
       {specs.length > 0 && (
-        <section className="card mt-8 p-5">
-          <h2 className="font-bold">Teknik Özellikler</h2>
-          <dl className="mt-4 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+        <section className="mt-8 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Teknik Özellikler</h2>
+          <dl className="mt-4 grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
             {specs.map(([k, v]) => (
-              <div key={k} className="flex justify-between border-b border-slate-100 py-2 dark:border-slate-800"><dt className="text-slate-500">{k}</dt><dd className="font-medium">{String(v)}</dd></div>
+              <div key={k} className="flex justify-between gap-4 border-b border-slate-100 py-2 dark:border-slate-800">
+                <dt className="text-slate-500">{k}</dt>
+                <dd className="text-right font-medium text-slate-800 dark:text-slate-200">{String(v)}</dd>
+              </div>
             ))}
           </dl>
         </section>
       )}
 
-      {similar.length > 0 && (
-        <section className="mt-12">
-          <h2 className="text-xl font-bold">Benzer Ürünler</h2>
-          <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-            {similar.map((s) => <ProductCard key={s.product.id} product={s.product} listings={s.listings} />)}
-          </div>
-        </section>
-      )}
+      <SimilarCarousel items={similar} />
     </div>
   );
 }

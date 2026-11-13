@@ -52,7 +52,7 @@ export function AIChat({ productId }: { productId?: string }) {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="AI Asistanı aç"
-        className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-lg shadow-primary/40 transition hover:scale-105 hover:bg-primary-dark"
+        className="fixed bottom-[calc(1.25rem+var(--compare-bar-h,0px))] right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/40 transition-all hover:scale-105"
       >
         {open ? <X className="h-6 w-6" /> : <Bot className="h-7 w-7" />}
       </button>
@@ -63,11 +63,11 @@ export function AIChat({ productId }: { productId?: string }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
             transition={{ duration: 0.2 }}
-            className="card fixed bottom-24 right-4 z-50 flex h-[32rem] max-h-[75vh] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden shadow-2xl"
+            className="card fixed bottom-[calc(6rem+var(--compare-bar-h,0px))] right-4 z-50 flex h-[32rem] max-h-[75vh] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden shadow-2xl"
             role="dialog"
             aria-label="AI Alışveriş Asistanı"
           >
-            <div className="flex items-center gap-2 bg-primary px-4 py-3 text-white">
+            <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-3 text-white">
               <Bot className="h-5 w-5" />
               <div>
                 <p className="text-sm font-bold">AI Alışveriş Asistanı</p>
