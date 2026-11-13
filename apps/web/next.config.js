@@ -10,6 +10,8 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.amazon.com.tr' },
       { protocol: 'https', hostname: 'picsum.photos' },
       { protocol: 'https', hostname: '**.supabase.co' },
+      // Product images come from many manufacturer/retailer CDNs (Apple, Amazon, Logitech, GoPro, Unsplash...)
+      { protocol: 'https', hostname: '**' },
     ],
   },
   async headers() {
